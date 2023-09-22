@@ -1,4 +1,4 @@
-;Aluno: João Carlos Batista        					Cartão: 00343016
+;Aluno: João Carlos Batista        					
 
 	.model small
 	.stack 100h
