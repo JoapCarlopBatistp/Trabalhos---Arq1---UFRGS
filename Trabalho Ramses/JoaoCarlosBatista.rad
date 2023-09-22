@@ -1,15 +1,15 @@
-;;Aluno: Jo„o Carlos Batista       Cart„o: 00343016
+;;Aluno: Jo√£o Carlos Batista       
 
 ORG 0
 
-reinicia:                     ;;Reinicia vari·veis para prÛxima execuÁ„o
+reinicia:                     ;;Reinicia vari√°veis para pr√≥xima execu√ß√£o
 	LDR A #0
 	STR A TAM_SFILE
 	STR A TAM_SLOOK
 	STR A SRES
 
 inicio:
-	LDR A SFILE, I           ;;Verifica o caso em que SFILE È nulo
+	LDR A SFILE, I           ;;Verifica o caso em que SFILE √© nulo
 	JZ sfile_null
 
 	LDR B SFILE
@@ -17,8 +17,8 @@ inicio:
 	JMP cardinalidade_file
 
 cardinalidade_file:
-	LDR X #1                   ;;Passa pelos valores dos endereÁos subsequentes a 
-	ADD X COP_SFILE            ;;COP_SFILE atÈ chegar em 0 (condiÁ„o de parada da string
+	LDR X #1                   ;;Passa pelos valores dos endere√ßos subsequentes a 
+	ADD X COP_SFILE            ;;COP_SFILE at√© chegar em 0 (condi√ß√£o de parada da string
         STR X COP_SFILE            ;;Para conseguir a cardinalidade de cada string
 	LDR A COP_SFILE, I
 	JZ fim_cardinalidade_file
@@ -31,7 +31,7 @@ fim_cardinalidade_file:
 	LDR X #1
 	ADD X TAM_SFILE
 	STR X TAM_SFILE
-	LDR A SLOOK, I        ;;Verifica caso em que SLOOK È nulo
+	LDR A SLOOK, I        ;;Verifica caso em que SLOOK √© nulo
 	JZ slook_null
 
 	LDR B SLOOK
@@ -49,7 +49,7 @@ cardinalidade_look:
         STR X TAM_SLOOK         
 	JMP cardinalidade_look
 
-verifica_maior:             ;;Utilizando as cardinalidades, verifica se SLOOK È maior
+verifica_maior:             ;;Utilizando as cardinalidades, verifica se SLOOK √© maior
 	LDR X #1            ;;que SFILE, se for, termina o programa
 	ADD X TAM_SLOOK
 	STR X TAM_SLOOK
@@ -62,7 +62,7 @@ verifica_maior:             ;;Utilizando as cardinalidades, verifica se SLOOK È 
 continua:
 	LDR A SFILE
 	STR A COP_SFILE
-	STR A PIV_SFILE     ;;Fixa o pivÙ de SFILE que serve como ponteiro para o primeiro
+	STR A PIV_SFILE     ;;Fixa o piv√¥ de SFILE que serve como ponteiro para o primeiro
 	LDR A SLOOK         ;;valor igual entre SLOOK e SFILE
 	STR A COP_SLOOK
 	JMP laco_principal
@@ -70,40 +70,40 @@ continua:
 
 
 laco_principal:
-	LDR A COP_SLOOK, I  ;;Verifica se SLOOK terminou (caso em que SLOOK est· contido em SFILE)
+	LDR A COP_SLOOK, I  ;;Verifica se SLOOK terminou (caso em que SLOOK est√° contido em SFILE)
 	JZ termino_slook
-	LDR A COP_SFILE, I  ;;Verifica se SFILE terminou (caso em que SLOOK n„o est· contido em SFILE)
+	LDR A COP_SFILE, I  ;;Verifica se SFILE terminou (caso em que SLOOK n√£o est√° contido em SFILE)
 	JZ termino_sfile
 	
-	OR A COP_SLOOK, I   ;;Verifica se o conte˙do de SLOOK È igual ao de SFILE
-	NOT A               ;;… basicamente a implementaÁ„o da tabela verdade:
+	OR A COP_SLOOK, I   ;;Verifica se o conte√∫do de SLOOK √© igual ao de SFILE
+	NOT A               ;;√â basicamente a implementa√ß√£o da tabela verdade:
 	STR A OP_LOG1       ;;[~(A or B) or (A and B)], que representa a tabela verdade
-	LDR A COP_SFILE, I  ;;"se, e somente se" (bicondiÁ„o)
+	LDR A COP_SFILE, I  ;;"se, e somente se" (bicondi√ß√£o)
 	LDR B COP_SLOOK, I
 	STR B OP_LOG2
 	AND A OP_LOG2
 	STR A OP_LOG2
 	LDR A OP_LOG1
 	OR A OP_LOG2
-	NOT A               ;;Como no caso "igual" a tabela verdade retorna 111...1, È necess·rio negar o resultado
+	NOT A               ;;Como no caso "igual" a tabela verdade retorna 111...1, √© necess√°rio negar o resultado
 	JMP 140
 
-ORG 140   ;;org para evitar que o cÛdigo se sobreponha
+ORG 140   ;;org para evitar que o c√≥digo se sobreponha
 
 	JZ iguais            ;;Pula se forem iguais
-        LDR X #1             ;;Sen„o incrementa o pivÙ
+        LDR X #1             ;;Sen√£o incrementa o piv√¥
 	ADD X PIV_SFILE
         STR X PIV_SFILE
 	LDR A PIV_SFILE
 	STR A COP_SFILE
 	LDR A SLOOK
 	STR A COP_SLOOK
-	JMP laco_principal     ;;Repete o laÁo principal
+	JMP laco_principal     ;;Repete o la√ßo principal
 
 
 iguais:
-	LDR X #1               ;;Se forem iguais, incrementa a cÛpia de SFILE e SLOOK
-	ADD X COP_SFILE        ;;N√O incrementa o pivÙ se forem iguais
+	LDR X #1               ;;Se forem iguais, incrementa a c√≥pia de SFILE e SLOOK
+	ADD X COP_SFILE        ;;N√ÉO incrementa o piv√¥ se forem iguais
         STR X COP_SFILE
 	LDR X #1
 	ADD X COP_SLOOK
@@ -118,7 +118,7 @@ termino_sfile:                 ;;Caso SFILE termine antes de SLOOK
 
 termino_slook:
 	LDR A PIV_SFILE        ;;Caso SLOOK termine antes de SFILE
-	STR A SRES             ;;Coloca o pivÙ no resultado
+	STR A SRES             ;;Coloca o piv√¥ no resultado
 	JMP fim
 
 sfile_null:                    ;;Caso SFILE seja nulo
@@ -127,7 +127,7 @@ sfile_null:                    ;;Caso SFILE seja nulo
 	JMP fim
 
 slook_null:                    ;;Caso SLOOK seja nulo
-	LDR A TAM_SFILE        ;;Adiciona SFILE ‡ cardinalidade de SFILE
+	LDR A TAM_SFILE        ;;Adiciona SFILE √† cardinalidade de SFILE
 	ADD A SFILE            ;;Retorna a soma dos dois
 	STR A SRES
 	JMP fim
@@ -140,13 +140,13 @@ ORG 128
 TAM_SFILE: DB 0       ;;Cardinalidade de SFILE
 TAM_SLOOK: DB 0       ;;Cardinalidade de SLOOK
 
-COP_SFILE: DB 0       ;;CÛpia de SFILE
-COP_SLOOK: DB 0       ;;CÛpia de SLOOK
+COP_SFILE: DB 0       ;;C√≥pia de SFILE
+COP_SLOOK: DB 0       ;;C√≥pia de SLOOK
 
-PIV_SFILE: DB 0       ;;PivÙ de SFILE
+PIV_SFILE: DB 0       ;;Piv√¥ de SFILE
 
-OP_LOG1: DB 0         ;;Primeira operaÁ„o lÛgica
-OP_LOG2: DB 0         ;;Segunda operaÁ„o lÛgica
+OP_LOG1: DB 0         ;;Primeira opera√ß√£o l√≥gica
+OP_LOG2: DB 0         ;;Segunda opera√ß√£o l√≥gica
 
 
 
