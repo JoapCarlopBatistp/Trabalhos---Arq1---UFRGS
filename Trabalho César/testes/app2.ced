@@ -1,0 +1,117 @@
+;
+;
+;******************************************************************************
+;
+;	Aplicação de teste do Kernel do professor
+;
+;	Versão: 2023.1
+;
+;	Áreas de memória
+;
+;	0100 - 01FF		_VETTAB
+;					Tabela com os vetores das funções do kernel
+;					*** CUIDADO! Esse vetor está no meio da área de código ***
+;
+;	8000 - FF7F		_APP
+;					Área onde será colocado o programa de aplicação.
+;					Esse programa vai fazer o acesso aos periféricos e interrupções, através das funções do Kernel.
+;
+;	- getchar
+;	- putchar(direita, ...)
+;
+;******************************************************************************
+
+
+_VETTAB:	equ	h0100
+_APP:		equ	h8000
+
+AREA_ESQUERDA:	equ		0
+AREA_DIREITA:	equ		1
+
+PARAM_RESET:	equ		0
+PARAM_FINISHED:	equ		1
+PARAM_TIME:		equ		2
+PARAM_BUFFER:	equ		3
+PARAM_SIZE:		equ		4
+		
+MINV:			equ		H20
+MAXV:			equ		H7E
+FORM_FEED:		equ		H0C
+		
+	org		_APP
+		
+;------------------------------------------------------------------------------
+	;	pos = 0
+	clr		pos
+	
+loop:
+	;	caractere = getchar()
+	;	putchar(R5=ESQUERDA, R4=caractere)
+	jsr		r7,getchar
+	mov		r0,caractere
+	
+	;	if (caractere==FF || (caractere>=MINV && caractere<=MAXV)) {
+	;		putchar(R5=DIREITA, R4=caractere, R3=pos)
+	; 		if (caractere==FF) pos=0 else pos++;
+	;	}
+	cmp		caractere,#FORM_FEED
+	beq		cont_1
+	cmp		caractere,#MINV
+	blt		cont_2
+	cmp		caractere,#MAXV
+	bgt		cont_2
+	
+cont_1:
+	mov		#AREA_DIREITA,r5
+	mov		caractere,r4
+	mov		pos,r3
+	jsr		r7,putchar
+
+	cmp		caractere,#FORM_FEED
+	bne		cont_3
+	clr		pos
+	br		cont_2
+cont_3:
+	inc		pos
+	br		cont_2
+		
+cont_2:
+	br		loop
+
+pos:	dw		0
+caractere:	dw	0
+
+
+;--------------------------------------------------------------------------
+; WORD kbhit(void)
+kbhit:
+		mov		#0,r0
+		jmp		(_VETTAB(r0))
+;--------------------------------------------------------------------------
+; WORD getchar(void)
+getchar:
+		mov		#2,r0
+		jmp		(_VETTAB(r0))
+;--------------------------------------------------------------------------
+; WORD putchar(WORD area, BYTE caractere)
+; WORD putchar(WORD area, BYTE caractere, WORD pos)
+putchar:
+		mov		#4,r0
+		jmp		(_VETTAB(r0))
+;--------------------------------------------------------------------------
+; WORD putmsg(WORD area, BYTE* msg)
+; WORD putmsg(WORD area, BYTE* msg, WORD pos)
+putmsg:
+		mov		#6,r0
+		jmp		(_VETTAB(r0))
+;--------------------------------------------------------------------------
+; WORD startline(BYTE *buffer, WORD max)
+startline:
+		mov		#8,r0
+		jmp		(_VETTAB(r0))
+;--------------------------------------------------------------------------
+; WORD getline(WORD param)
+getline:
+		mov		#10,r0
+		jmp		(_VETTAB(r0))
+

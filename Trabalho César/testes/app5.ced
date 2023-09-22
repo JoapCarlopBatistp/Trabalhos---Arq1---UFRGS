@@ -1,0 +1,162 @@
+;
+;
+;******************************************************************************
+;
+;	Aplicação de teste do Kernel do professor
+;
+;	Versão: 2023.1
+;
+;	Áreas de memória
+;
+;	0100 - 01FF		_VETTAB
+;					Tabela com os vetores das funções do kernel
+;					*** CUIDADO! Esse vetor está no meio da área de código ***
+;
+;	8000 - FF7F		_APP
+;					Área onde será colocado o programa de aplicação.
+;					Esse programa vai fazer o acesso aos periféricos e interrupções, através das funções do Kernel.
+;
+;	- startline
+;	- getline
+;******************************************************************************
+
+
+_VETTAB:	equ	h0100
+_APP:		equ	h8000
+
+AREA_ESQUERDA:	equ		0
+AREA_DIREITA:	equ		1
+
+PARAM_RESET:	equ		0
+PARAM_FINISHED:	equ		1
+PARAM_TIME:		equ		2
+PARAM_BUFFER:	equ		3
+PARAM_SIZE:		equ		4
+		
+MINV:			equ		H20
+MAXV:			equ		H7E
+FF:				equ		H0C
+CR:				equ		H0D
+LF:				equ		H0A
+BS:				equ		H08
+		
+	org		_APP
+		
+;------------------------------------------------------------------------------
+
+loop:
+	mov		#AREA_ESQUERDA,r5		; limpa a area esquerda
+	mov		#CR,r4
+	jsr		r7,putchar
+	mov		#AREA_ESQUERDA,r5
+	mov		#LF,r4
+	jsr		r7,putchar
+
+	mov		#buffer,r5				; inicia a entrada de string
+	mov		#5,r4
+	jsr		r7,startline
+	
+loop1:
+	mov		#PARAM_FINISHED,r5		; verifica se terminou a entrada (ENTER ou numero maximo de teclas)
+	jsr		r7,getline
+	tst		r0
+	beq		loop
+
+	mov		#PARAM_SIZE,r5			; pega número de teclas e coloca na area direita. testar com o BS
+	jsr		r7,getline
+	add		#'0',r0
+	mov		#AREA_DIREITA,r5
+	mov		r0,r4
+	clr		r3
+	jsr		r7,putchar
+	
+	mov		#PARAM_TIME,r5			; pega o tempo transcorrido e coloca na area direita
+	jsr		r7,getline
+	mov		r0,r1
+	
+	jsr		r7,format_counter
+	
+	mov		#AREA_DIREITA,r5
+	mov		#string,r4
+	mov		#4,r3
+	jsr		r7,putmsg
+		
+	br		loop1
+
+buffer:	dab	[25]
+
+;
+;	ENTRA: r1
+;	r2=&string[3]
+;	r3=4
+;	do
+;		r0 = toascii(r1&0x000F)
+;		*r2 = LOWBYTE(r0)
+;		r1 >>= 4;
+;		r2--
+;	while (--r3 != 0);
+;	string[4] = '\0'
+;
+string:	dab		[10]
+format_counter:
+	mov		#string+3,r2
+	mov		#4,r3
+
+fc_loop:		
+	mov		r1,r0
+	and		#h000f,r0
+	add		#'0',r0
+	cmp		r0,#'9'
+	ble		fc_1
+	add		#7,r0
+fc_1:
+	and		#hff00,-1(r2)
+	or		r0,-1(r2)
+	
+	asr		r1
+	asr		r1
+	asr		r1
+	asr		r1
+	
+	dec		r2
+
+	sob		r3,fc_loop
+	
+	clr		string+4
+
+	rts		r7
+
+
+;--------------------------------------------------------------------------
+; WORD kbhit(void)
+kbhit:
+		mov		#0,r0
+		jmp		(_VETTAB(r0))
+;--------------------------------------------------------------------------
+; WORD getchar(void)
+getchar:
+		mov		#2,r0
+		jmp		(_VETTAB(r0))
+;--------------------------------------------------------------------------
+; WORD putchar(WORD area, BYTE caractere)
+; WORD putchar(WORD area, BYTE caractere, WORD pos)
+putchar:
+		mov		#4,r0
+		jmp		(_VETTAB(r0))
+;--------------------------------------------------------------------------
+; WORD putmsg(WORD area, BYTE* msg)
+; WORD putmsg(WORD area, BYTE* msg, WORD pos)
+putmsg:
+		mov		#6,r0
+		jmp		(_VETTAB(r0))
+;--------------------------------------------------------------------------
+; WORD startline(BYTE *buffer, WORD max)
+startline:
+		mov		#8,r0
+		jmp		(_VETTAB(r0))
+;--------------------------------------------------------------------------
+; WORD getline(WORD param)
+getline:
+		mov		#10,r0
+		jmp		(_VETTAB(r0))
+

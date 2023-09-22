@@ -1,0 +1,682 @@
+;ALUNO: JOÃO CARLOS BATISTA
+;
+;******************************************************************************
+;
+;	Arquivo de Referência para o desenvolvimento do kernel.
+;
+;	Versão: 2023.1
+;
+;	Áreas de memória
+;
+;	0000 - 7FFF		_KERNEL
+;					Área de Kernel para implementação dos alunos
+;
+;	0100 - 01FF		_VETTAB
+;					Tabela com os vetores das funções do kernel
+;					*** CUIDADO! Esse vetor está no meio da área de código ***
+;
+;	8000 - FF7F		_APP
+;					Área onde será colocado o programa de aplicação.
+;					Esse programa vai fazer o acesso aos periféricos e interrupções, através das funções do Kernel.
+;
+;	FF80 - FFBF 		_IOAREA16
+;					Area de perifericos, acessada na base 16 bits
+;
+;	FFC0 - FFFF		_IOAREA08
+;					Area de perifericos, acessada na base 8 bits
+;					
+;******************************************************************************
+
+
+_KERNEL:	equ	h0000
+_VETTAB:	equ	h0100
+_RESET:		equ	_VETTAB+H0100
+_APP:		equ	h8000
+_IOAREA16:	equ	hFF80
+_IOAREA08:	equ	hFFC0
+
+
+;
+;------------------------------------------------------------------------------
+;	Área reservada para os periféricos
+;------------------------------------------------------------------------------
+
+; Acesso em 16 bits
+		org		_IOAREA16
+		daw		[31]
+IVET:	dw		0			; Vetor de interrupção
+
+; Acesso em 8 bits
+		org		_IOAREA08
+		dab		[23]
+TIMDT:	db		0			; Registro de programação do timer
+INTS:	db		0			; INTERRUPT STATUS: IP x x x . x x IPStec IPStim
+INTE:	db		0			; INTERRUPT ENABLE: IE x x x . x x IEStec IEStim
+TECST:	db		0			; Status do teclado
+TECDT:	db		0			; Dado do teclado
+VISOR:	dab		[36]			; Portas de acesso ao visor
+
+;	
+;------------------------------------------------------------------------------
+;	Ponto de entrada do RESET do processador
+;------------------------------------------------------------------------------
+		org		_KERNEL
+		jmp		_RESET
+
+;
+;------------------------------------------------------------------------------
+;	Area do kernel com os vetores das funções do kernel
+;------------------------------------------------------------------------------
+		org		_VETTAB
+		
+		dw		kbhit			; WORD	kbhit(void)
+		dw		getchar			; WORD	getchar(void)
+		dw		putchar			; WORD	putchar(WORD area, BYTE caractere)
+								; WORD	putchar(WORD area, BYTE caractere, WORD pos)
+		dw		putmsg			; WORD	putmsg(WORD area, BYTE *msg)
+								; WORD	putmsg(WORD area, BYTE *msg, WORD pos)
+		dw		startline		; WORD	startline(BYTE *buffer, WORD max)
+		dw		getline			; WORD	getline(WORD param)
+		
+;	
+;------------------------------------------------------------------------------
+;	Código de RESET (BOOT) do processador/interrupção
+;------------------------------------------------------------------------------
+		org		_RESET
+
+		clr INTE			;Desabilita as interrupções
+
+		clr r0				;Limpa os registradores
+		clr r1
+		clr r2
+		clr r3
+		clr r4
+		clr r5
+
+
+		mov STACK, r6			;Inicializa o stack pointer
+
+
+		mov #isr, IVET			;Coloca o endereço da subrotina de interrupções no vetor de interrupções
+
+		clr INTS			;Limpa todos endereços de teclas
+		clr TECST
+		clr TECDT
+
+
+		mov #100, TIMDT			;Configura o timer (uma interrupção a cada 100 milissegundos) (obs: Colocar zero no TIMDT também configura para 100 ms)
+
+
+		jsr r7, clear_left		;Limpa o visor esquerdo
+		jsr r7, clear_right		;Limpa o visor direito
+
+						
+						;Obs - As interrupções só são reativadas na função startline
+
+
+		jmp		_APP		;Pula para o programa de aplicação
+
+
+;------------------------------------------------------------------------------
+; Área para as variáveis do Kernel (cursor e afins)		
+;------------------------------------------------------------------------------
+
+STACK: dw 31000
+CURSOR: dw 65499                             	 ;Posiciona o cursor no início da área do visor esquerdo
+VISOR_ESQUERDA: dw 65500		     	 ;ponteiro para o inicio da primeira área do visor 
+VISOR_DIREITA: dw 65524                      	 ;ponteiro para o inicio da segunda área do visor 
+AUX: dw 0					 ;variável auxiliar
+
+;----------------Variáveis para STARTLINE-------------------------
+
+COPIA_BUFFER: dw 0				 ;Cópia do endereço de início do buffer
+MAX: dw -1					 ;Cópia do valor máximo do buffer
+
+
+;----------------Variáveis para GETLINE-------------------------
+
+IBUFFER: dw -1					 ;endereço de inicio do buffer
+SBUFFER: dw -1					 ;tamanho do buffer (aumentado a cada caractere)
+TIME: dw -1 					 ;acumula o tempo em startline
+FOI_CHAMADA: dw -1				 ;verifica se startline já foi chamada durante o programa
+TERMINOU_STARTLINE: dw -1			 ;checa se startline terminou
+
+
+;---------------Variáveis utilizadas pelos aplicativos-------------------
+
+AREA_ESQUERDA:	equ		0
+AREA_DIREITA:	equ		1
+
+PARAM_RESET:	equ		0
+PARAM_FINISHED:	equ		1
+PARAM_TIME:	equ		2
+PARAM_BUFFER:	equ		3
+PARAM_SIZE:	equ		4
+
+MINV:		equ		H20
+MAXV:		equ		H7E
+FF:		equ		H0C
+CR:		equ		H0D
+LF:		equ		H0A
+;		
+;------------------------------------------------------------------------------
+; WORD	kbhit(void)		
+;------------------------------------------------------------------------------
+kbhit:		
+		tst INTE			 ;Verifica se startline está ativo
+		bne final_caso_startline	
+		cmp TECST, #0
+		bne tem_tecla                    ;Branch caso a comparação ligar o flag zero para 4 endereços adiante
+		mov #69, r0               	 ;Coloca algum valor aleatório em r0 caso não tenha tecla
+		br final                  	 ;pula para o retorno da subrotina
+tem_tecla:
+		clr r0               	  	 ;Caso tenha tecla, coloca zero no r0
+
+final:
+		clr TECST
+		rts		r7
+
+final_caso_startline:				 ;Se startline estiver ativo, kbhit é ignorado pelo kernel
+		rts		r7
+
+;------------------------------------------------------------------------------
+; Limpa Tela Esquerda (chamada - jsr r7, clear_left)
+;------------------------------------------------------------------------------
+clear_left:					;Limpa LED's de 65500 a 65523
+		
+		mov r0, -(r6)   		;salva na pilha os registradores que serão utilizados para não perder os dados
+		mov r1, -(r6)
+		mov VISOR_ESQUERDA, r0
+		mov #24, r1
+laco_clear_left:
+		mov #32, (r0)   		;move o ascii H20 (equivalente ao espaço) para o lugar que r0 aponta --> 65.5xx
+		inc r0				;aumenta 1 a cada laço
+		sob r1, laco_clear_left 	;subtrai 1 a cada laço e branch quando zero
+
+		mov (r6)+, r1           	;restaura os valores dos registradores pela pilha
+		mov (r6)+, r0
+		
+
+		rts		r7
+
+;------------------------------------------------------------------------------
+; Limpa Tela Direita (chamada - jsr r7, clear_right)
+;------------------------------------------------------------------------------
+clear_right:					;Limpa LED's de 65524 a 65535
+
+		mov r0, -(r6)   		;salva na pilha os registradores que serão utilizados para não perder os dados
+		mov r1, -(r6)
+		mov VISOR_DIREITA, r0
+		mov #12, r1
+laco_clear_right:
+		mov #32, (r0)   		;move o ascii H20 (equivalente ao espaço) para o lugar que r0 aponta --> 65.5xx
+		inc r0				;aumenta 1 a cada laço
+		sob r1, laco_clear_right 	;subtrai 1 a cada laço e branch quando zero
+
+		mov (r6)+, r1           	;restaura os valores dos registradores pela pilha
+		mov (r6)+, r0
+		
+
+		rts		r7
+
+
+;		
+;------------------------------------------------------------------------------
+; WORD	getchar(void)								
+;------------------------------------------------------------------------------
+getchar:
+		tst INTE
+		bne erro_getchar
+		cmp TECDT, #0   		;Subrotina para verificar se o TECST tem flag          
+		beq getchar           
+		br getchar_continua     	;Se r0 não for zero, volta para o início e repete até ter flag do TECST
+getchar_continua:
+		mov TECDT, r0    		;Coloca TECDT no r0
+		and #255, r0     		;AND para limpar o primeiro byte do registrador ----> 0000 0000 xxxx xxxx        
+		clr TECST    			;Retira o flag de TECST e retorna
+		clr TECDT
+		br final_getchar
+erro_getchar:
+		mov #65535, r0
+		rts		r7
+
+final_getchar:
+		rts		r7
+
+;		
+;------------------------------------------------------------------------------
+; WORD	putchar(WORD area, BYTE caractere)			
+; WORD	putchar(WORD area, BYTE caractere, WORD pos)
+; R5 - Parâmetro de área
+; R4 - Parâmetro de caractere
+; R3 - Parâmetro "pos"
+; R0 - Saída
+;------------------------------------------------------------------------------
+putchar:
+		tst INTE			;Testa se startline está ligado
+		beq putchar_convencional
+		tst r5				;Se estiver, testa se o destino é a área da esquerda ou da direita
+		beq caso_erro_intermediario	;Se for esquerda, retorna erro, se for direita continua
+
+
+putchar_convencional:
+		tst r5				;Verifica se "área" é zero
+		beq putchar_esquerda		;se zero vai para uma parte do código (esquerda), se qualquer outro valor para outra (direita)
+		jmp putchar_direita
+
+putchar_esquerda:
+		
+		cmp r4, #8			;verifica os três caracteres especiais(H08, H0D, ou H0A)
+		beq caso_backspace		;para cada um dos casos, jump para sua subrotina correspondente
+		cmp r4, #13
+		beq caso_carriage_return
+		cmp r4, #10
+		beq caso_line_feed
+		br putchar_esquerda_continua	;se não for um dos três, vai para a verificação de ascii convencional
+
+caso_backspace:
+		jsr r7, back_space		;caso backspace
+		br putchar_retorno
+		
+caso_carriage_return:
+		jsr r7, carriage_return		;caso carriage return
+		br putchar_retorno
+
+caso_line_feed:
+		jsr r7, line_feed		;caso line feed
+		br putchar_retorno
+						
+putchar_esquerda_continua:
+		
+		cmp r4, #32			;verifica se "caractere" está entre H20 e H7A (inclusos)
+		bcs caso_erro			;branch se maior ou igual a 32 (H20 - space)
+						;caso contrário retorna erro
+
+		cmp r4, #122
+		bhi caso_erro			;branch se for menor ou igual a 122 (H7A - "z")
+	
+		inc CURSOR			;incrementa 1 do cursor para teste
+		cmp CURSOR, VISOR_DIREITA	;testa a posição do cursor (menor ou igual a 65523)
+		bcs cursor_menor
+		dec CURSOR
+		br putchar_retorno		;retorno sem erro, mas com cursor maior que área esquerda
+
+cursor_menor:
+		mov CURSOR, r0			;move cursor para r0 para poder usá-lo como ponteiro
+		mov r4, (r0)			;move o caractere para a posição para a qual o cursor aponta
+		
+		br putchar_retorno
+
+caso_erro_intermediario:			;Branch intermediário (Uma vez que o número máximo de bytes para branch é 128 [8 bits])
+		br caso_erro
+
+putchar_direita:
+		cmp r3, #11			;verificar se "pos" está entre zero e onze (inclusos), se sim, continua, se não, retorna erro
+		bls caractere_especial
+		br caso_erro	
+
+caractere_especial:
+		cmp r4, #12			;checa se é form feed (ascii 12 ou H0C)
+		bne trata_caractere
+		jsr r7, form_feed
+		br putchar_retorno
+
+trata_caractere:
+		cmp r4, #32			;verifica se "caractere" está entre H20 e H7A (inclusos)
+		bcs caso_erro			;branch se maior ou igual a 32 (H20 - space)
+
+		cmp r4, #122
+		bhi caso_erro			;branch se for menor ou igual a 122 (H7A - "z")		
+		
+		add VISOR_DIREITA, r3		;acessa indiretamente a soma de "visor_direita" com "pos" e escreve o ascii lá (lembrar de verificar os asciis)	
+		
+		mov r4, (r3)
+		sub VISOR_DIREITA, r3  		;Subtrai VISOR_DIREITA de pos apenas para retornar o pos original
+		
+		br putchar_retorno
+
+caso_erro:
+		mov #-1, r0
+		rts		r7
+
+putchar_retorno:
+		clr r0
+		rts		r7
+
+;------------------------------------------------------------------------------
+; SUBROTINAS EXTRAS PARA PUTCHAR							
+;------------------------------------------------------------------------------
+;
+
+;---------------------BACKSPACE-------------------------------------
+back_space:					;ascii H08  (trata os casos de cursor <= 65500)
+
+		dec CURSOR			;subtrai um do cursor para efetuar os testes
+		cmp CURSOR, #65499		;se "cursor" for menor que "visor_esquerda" branch para o final
+		bcs caso_nao_branch
+		br back_space_final		;pula para o final sem incrementar (caso em que é possível dar backspace)
+
+	caso_nao_branch:
+		inc CURSOR			;incremento para onde o branch vai e que não é processado no caso "não branch"
+
+	back_space_final:
+		rts		r7
+
+
+
+;---------------------CARRIAGE RETURN-------------------------------------
+carriage_return:				;ascii H0D  (simplesmente coloca "VISOR_ESQUERDA" em "CURSOR")
+
+		mov #65499, CURSOR
+		rts		r7
+
+
+
+;---------------------LINE FEED-------------------------------------
+line_feed:					;ascii H0A  (preenche toda a área esquerda com space (ascii H20) e mantém a posição do cursor onde está)
+
+		jsr r7, clear_left
+		rts		r7
+
+
+
+;---------------------FORM FEED-------------------------------------
+form_feed:					;ascii H0C (preenche toda a área direita com space (ascii H20))
+
+		jsr r7, clear_right
+		rts		r7
+
+
+
+
+;		
+;------------------------------------------------------------------------------
+; WORD	putmsg(WORD area, BYTE *msg)
+; WORD	putmsg(WORD area, BYTE *msg, WORD pos)
+; R5 - Parâmetro de área
+; R4 - Parâmetro de byte
+; R3 - Parâmetro pos
+;------------------------------------------------------------------------------  
+putmsg:
+		mov r1, -(r6)			;Salva os registradores que serão usados
+		mov r2, -(r6)
+		mov r4, -(r6)
+		mov r5, -(r6)
+		dec r4
+		mov r4, r1			;Move o byte inicial da string para r1 (auxiliar)
+		tst INTE			;Verifica se as interrupções estão ligadas (startline ligado)
+		bne caso_startline_ligado
+
+loop_principal:
+		mov (r1), r4			;Coloca o ascii no r4
+		and #255, r4
+		jsr r7, putchar			;Chama o putchar (já feito)
+		inc r1				;Incrementa o endereço em 1
+		mov (r1), r2
+		and #255, r2
+		tst r2				;Se o ascci no endereço for 0, termina a computação (critério de parada)
+		beq putmsg_retorno
+		tst r5				;Verifica qual a área
+		beq loop_principal		;Esquerda
+						;Direita
+
+
+direita_putmsg:					;Se for área direita é necessário tomar mais cuidados
+		cmp r4, #12			;Se o ascii for "form feed" não incrementa o parâmetro "pos" (r3)
+		beq nao_incrementa
+		tst r0
+		bne nao_incrementa
+		inc r3				;Incremento do "pos"
+
+nao_incrementa:
+		br loop_principal
+
+
+
+caso_startline_ligado:				;Caso o startline estiver ligado
+		cmp r5, #1			;Verifica se a área é esquerda ou direita
+		beq loop_principal		;Se for direita, continua, senão retorna erro
+		br erro_putmsg
+		
+erro_putmsg:					;Caso de erro, coloca -1 em r0 e transporta as variáveis da pilha para os registradores originais
+		mov (r6)+, r5
+		mov (r6)+, r4
+		mov (r6)+, r1
+		mov #-1, r0
+		rts		r7
+putmsg_retorno:					
+		mov (r6)+, r5			;Caso sem erro, coloca 0 em r0 e transporta as variáveis da pilha para os registradores originais
+		mov (r6)+, r4
+		mov (r6)+, r2
+		mov (r6)+, r1
+		clr r0
+		rts		r7
+;		
+;------------------------------------------------------------------------------
+; WORD	startline(BYTE *buffer, WORD max)
+; R5 - *BUFFER
+; R4 - MAX
+;------------------------------------------------------------------------------
+startline:
+		tst INTE			;Testa se o startline já está ativo, se estiver, ignora a função
+		bne final_startline
+		mov #-1, TERMINOU_STARTLINE	;"Desliga" a variável "TERMINOU_STARTLINE"
+		clr SBUFFER			;Limpa a variável de tamanho de buffer
+		clr TIME			;Limpa a variável de contagem de tempo
+		mov #65500, CURSOR		;Reseta o cursor
+		mov #69, FOI_CHAMADA		;Coloca um valor aleatório na variável "FOI_CHAMADA"
+		mov r5, COPIA_BUFFER		;Coloca o ponteiro de inicio do buffer em "COPIA_BUFFER" (variável)
+		mov r5, IBUFFER			;Coloca o ponteiro de inicio do buffer em "IBUFFER"	(fixo)
+		dec COPIA_BUFFER		;Decrementa o endereço do buffer em um (O motivo será discutido nas interrupções)
+		mov r4, MAX			;Salva o valor máximo em "MAX"
+		or #131, INTE			;Liga as interrupções
+final_startline:
+		rts		r7		;Retorno da função
+				
+;		
+;------------------------------------------------------------------------------
+; WORD	getline(WORD param)
+; R5 - Parâmetro
+;------------------------------------------------------------------------------
+getline:
+		cmp r5, #0			;Testa se é param(0)
+		beq reset
+		cmp r5, #1			;Testa se é param(1)
+		beq finished
+		cmp r5, #2			;Testa se é param(2)
+		beq get_time
+		cmp r5, #3			;Testa se é param(3)
+		beq buffer
+		cmp r5, #4			;Testa se é param(4)
+		beq size
+
+		jmp erro_getline		;Se não for passado um parâmetro válido, retorna erro
+
+
+reset:						;Reseta a startline
+		cmp INTE, #0
+		beq erro_getline		;Se startline já estiver desligada, retorna erro
+		mov #-1, FOI_CHAMADA		;Desliga o flag artificial de "FOI_CHAMADA"
+		clr INTE			;Desliga as interrupções
+		br final_getline		;Retorna
+
+;---------------------------------------------------------------------------------	
+finished:					;Entrada de string terminou?
+	
+		tst TERMINOU_STARTLINE		;Verifica se "TERMINOU_STARTLINE é zero
+		beq clear_r0			;Se for, a função terminou
+		cmp FOI_CHAMADA, #69		;Se não, testa se "FOI_CHAMADA" tem o valor arbitrário definido anteriormente
+		bne erro_getline		;Se não, retorna erro
+		tst INTE			;Verifica se as interrupções estão desligadas
+		bne erro_getline		;Se não estiverem, retorna erro
+clear_r0:
+		mov #-1, TERMINOU_STARTLINE	;Desliga "TERMINOU_STARTLINE"
+		clr INTE			;Desativa as interrupções
+		clr r0				;Limpa o registrador 0
+		br final_getline		;Retorna
+
+;---------------------------------------------------------------------------------
+get_time:					;Tempo de execução
+
+		cmp TIME, #-1			;Verifica se "TIME" tem valor
+		beq erro_getline_2		;Se não, retorna erro
+		mov TIME, r0			;Se sim, move o valor de "TIME" para r0
+		br final_getline		;Retorna
+
+;---------------------------------------------------------------------------------	
+buffer:						;Endereço de inicio do buffer
+
+		cmp IBUFFER, #-1		;Testa se o buffer tem endereço
+		beq erro_getline		;Se não tiver, retorna erro
+		mov IBUFFER, r0			;Se tiver, move "IBUFFER" (que contém o endereço inicial do buffer) para r0
+		jmp final_getline		;Retorna
+	
+;---------------------------------------------------------------------------------
+size:						;Numero de caracteres no buffer
+
+		cmp SBUFFER, #-1		;Verifica se SBUFFER tem valor
+		beq erro_getline		;Se não tiver, retorna erro
+		mov SBUFFER, r0			;Se tiver, move "SBUFFER" (que contém o número de teclas digitadas) para r0
+		jmp final_getline		;Retorna
+
+
+;---------------------------------------------------------------------------------
+erro_getline:					;Casos em que o erro precisa retornar 65.535
+		mov #65535, r0
+		rts		r7
+
+erro_getline_2:					;Casos em que o erro precisa retornar zero
+		clr r0
+		rts 		r7
+
+final_getline:					;Função de retorno convencional
+	
+		rts		r7
+
+;------------------------------------------------------------------------------
+; INTERRUPÇÕES
+;------------------------------------------------------------------------------
+		
+isr:
+		mov r0, -(r6)			;Salva todos os registradores na pilha
+		mov r1, -(r6)
+		mov r2, -(r6)
+		mov r3, -(r6)
+		mov r4, -(r6)
+		mov r5, -(r6)
+
+		mov INTS, r0			;Move o INTS para r0
+		and #1, r0			;Checa se tem interrupção de TIMER
+		bne isr_timer			;branch para inr_timer
+
+		mov INTS, r0			;Move o INTS para r0
+		and #2, r0			;Checa se tem interrupção de TECLA
+		bne isr_tecla			;branch para isr_tecla
+		jmp retorno			;Se não tiver nenhuma interrupção (Se é que isso é possível?) retorna diretamete
+		
+	
+isr_timer:					;Interrupção de Timer					
+		mov TIME, r1			;Move variável "TIME" para r1
+		add #10, r1			;Soma 10 (décimo de milissegundo)
+		mov r1, TIME			;Volta o valor para "TIME"
+		and #hFFE, INTS			;Desliga o bit de interrupção de timer
+		jmp retorno			;Retorna
+
+isr_tecla:					
+		mov COPIA_BUFFER, r2		;Coloca a copia do endereço do buffer em r2
+		mov SBUFFER, r3			;Coloca a copia do numero de caracteres digitados em r3
+		mov TECDT, r4			;Coloca a tecla em r4		
+		cmp r4, #8			;Verifica se a tecla é backspace
+		beq backspace_startline		;Se for, pula para a subrotina de backspace
+		cmp r4, #13			;Verifica se a tecla é enter
+		beq enter_intermediario		;Se for, pula para a subrotina de enter
+		cmp r4, #32			;Verifica se o ascii está entre H20 e H7A (código já explicado em putchar)
+		bcs retorno_intermediario
+		cmp r4, #122
+		bhi retorno_intermediario
+		cmp CURSOR, VISOR_DIREITA	;Verifica se o cursor já passou do visor esquerdo
+		beq cursor_invalido		;Se sim, pula para subrotina de cursor inválido
+
+		mov CURSOR, r0			;Move o cursor para r0
+		mov r4, (r0)			;Coloca o ascii no visor (usando o Cursor indiretamente)
+		inc CURSOR			;Incrementa o cursor
+
+move_tecla_buffer:
+		and #255, r4			;Por via das dúvidas, limpa o byte mais significativo de r4 (que contém a tecla)
+		and #65280, (r2)		;Zera o byte menos significativo do endereço (word) do buffer atual
+		or r4, (r2)			;Faz um OR entre o valor contido no endereço do buffer e a tecla (Preserva o byte mais significativo anterior e adiciona o novo [tecla])
+		clr TECST			;Limpa TECST
+		clr TECDT			;Limpa TECDT
+		inc r3				;Incrementa r3 (que contém SBUFFER)
+		cmp r3, MAX			;Compara r3 com "MAX" para ver se não passou do limite de caracteres do buffer
+		beq enter			;Se passsou, vai para a mesma subrotina da tecla enter
+		inc r2				;Incrementa r2 (que contém COPIA_BUFFER)
+		mov r3, SBUFFER			;Salva r3 incrementado em SBUFFER
+		mov r2, COPIA_BUFFER		;Salva r2 incrementado em COPIA_BUFFER
+		
+
+cursor_invalido:
+		mov #hFFD, INTS			;No caso de cursor inválido, só tira o flag da tecla de INTS (mas ainda recebe backspace e enter)
+		br retorno			;Retorna da interrupção
+
+retorno_intermediario:				;Criado pois o branch tem alcance máximo de 8 bits (128 bytes de deslocamento)
+		br retorno	
+enter_intermediario:				;Mesma ideia do "retorno_intermediario"
+		br enter
+
+backspace_startline:				;Tratamento do backspace
+
+		cmp CURSOR, #65500		;Verifica se o cursor está no visor da extrema esquerda
+		beq retorno			;Se sim, retorna sem fazer nada
+		dec CURSOR			;Se não, decrementa o cursor
+		dec SBUFFER			;Decrementa o contador de teclas
+		dec COPIA_BUFFER		;Decrementa o endereço atual do buffer
+		dec r2				;Decrementa r2 (que contém COPIA_BUFFER)
+		clr r4				;Limpa r4 (coloca zero em r4)
+		and #255, r4			;Limpa o byte mais significativo de r4 (Redundante, é mais uma medida de precaução)
+		or r4, (r2)			;Faz um OR entre o r4 e o que está contido no endereço mais significativo permanece, e o que está no menos significativo é zerado
+		mov CURSOR, r0			;Move o cursor para r0
+		mov #32, (r0)			;Limpa o cursor (Move um space para o visor)
+		clr TECST			;Limpa flag de tecla
+		clr TECDT			;Limpa a tecla
+		mov #hFFD, INTS			;Limpa o flag de tecla em INTS
+		br retorno			;Retorna
+
+
+enter:						;Caso enter (carriage return)
+		clr TECST			;Limpa TECST
+		clr TECDT			;Limpa TECDT
+		clr TIMDT			;Limpa TIMDT
+		cmp r4, #13			;Verifica se é realmente o caso do enter
+		beq continua_enter		;Se for, não incrementa SBUFFER (uma vez que o enter não vai para o buffer)
+		inc SBUFFER			;Se não for (o que implica em término por SBUFFER = MAX), então incrementa SBUFFER
+continua_enter:
+		mov (r6)+, r5			;Retira tudo da pilha
+		mov (r6)+, r4
+		mov (r6)+, r3
+		mov (r6)+, r2
+		mov (r6)+, r1
+		mov (r6)+, r0
+		clr TECST			;Limpa TECST
+		clr TECDT			;Limpa TECDT
+		clr TIMDT			;Limpa TIMDT
+		clr INTS			;Limpa todos os flags de INTS
+		mov #-1, FOI_CHAMADA		;Desliga o flag artificial de "FOI_CHAMADA"
+		clr TERMINOU_STARTLINE		;Liga o flag artificial de "TERMINOU_STARTLINE"
+		
+		rti				;Retorna da interrupção
+	
+
+retorno:					;Retorno convencional
+		clr TECST			;Limpa TECST
+		clr TECDT			;Limpa TECDT
+		clr INTS			;Limpa INTS
+		mov (r6)+, r5			;Rettira tudo da pilha
+		mov (r6)+, r4
+		mov (r6)+, r3
+		mov (r6)+, r2
+		mov (r6)+, r1
+		mov (r6)+, r0
+
+		rti				;Retorna da interrupção
+

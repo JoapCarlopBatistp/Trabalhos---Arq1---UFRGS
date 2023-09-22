@@ -1,0 +1,113 @@
+;
+;
+;******************************************************************************
+;
+;	Aplicação de teste do Kernel do professor
+;
+;	Versão: 2023.1
+;
+;	Áreas de memória
+;
+;	0100 - 01FF		_VETTAB
+;					Tabela com os vetores das funções do kernel
+;					*** CUIDADO! Esse vetor está no meio da área de código ***
+;
+;	8000 - FF7F		_APP
+;					Área onde será colocado o programa de aplicação.
+;					Esse programa vai fazer o acesso aos periféricos e interrupções, através das funções do Kernel.
+;
+;	- putmsg
+;	- getchar
+;******************************************************************************
+
+
+_VETTAB:	equ	h0100
+_APP:		equ	h8000
+
+AREA_ESQUERDA:	equ		0
+AREA_DIREITA:	equ		1
+
+PARAM_RESET:	equ		0
+PARAM_FINISHED:	equ		1
+PARAM_TIME:		equ		2
+PARAM_BUFFER:	equ		3
+PARAM_SIZE:		equ		4
+		
+MINV:			equ		H20
+MAXV:			equ		H7E
+FF:				equ		H0C
+CR:				equ		H0D
+LF:				equ		H0A
+		
+	org		_APP
+		
+;------------------------------------------------------------------------------
+	
+loop:
+	; putmsg(ESQUERDA, "\r\nputmsg-E")
+	mov		#AREA_ESQUERDA,r5
+	mov		#msg1,r4
+	jsr		r7,putmsg
+	
+	; putmsg(DIREITA, "\lputmsg-D", 0)
+	mov		#AREA_DIREITA,r5
+	mov		#msg2,r4
+	clr		r3
+	jsr		r7,putmsg
+	
+	jsr		r7,getchar
+	
+	; putmsg(ESQUERDA, "\r\nputmsg-E")
+	mov		#AREA_ESQUERDA,r5
+	mov		#msg3,r4
+	jsr		r7,putmsg
+	
+	; putmsg(DIREITA, "\lputmsg-D", 0)
+	mov		#AREA_DIREITA,r5
+	mov		#msg4,r4
+	clr		r3
+	jsr		r7,putmsg
+	
+	jsr		r7,getchar
+	
+	br		loop
+
+msg1:	dab		CR, LF, 'putmsg-E', 0
+msg2:	dab		FF, 'putmsg-D', 0
+
+msg3:	dab		CR, LF, 0
+msg4:	dab		FF, 0
+
+;--------------------------------------------------------------------------
+; WORD kbhit(void)
+kbhit:
+		mov		#0,r0
+		jmp		(_VETTAB(r0))
+;--------------------------------------------------------------------------
+; WORD getchar(void)
+getchar:
+		mov		#2,r0
+		jmp		(_VETTAB(r0))
+;--------------------------------------------------------------------------
+; WORD putchar(WORD area, BYTE caractere)
+; WORD putchar(WORD area, BYTE caractere, WORD pos)
+putchar:
+		mov		#4,r0
+		jmp		(_VETTAB(r0))
+;--------------------------------------------------------------------------
+; WORD putmsg(WORD area, BYTE* msg)
+; WORD putmsg(WORD area, BYTE* msg, WORD pos)
+putmsg:
+		mov		#6,r0
+		jmp		(_VETTAB(r0))
+;--------------------------------------------------------------------------
+; WORD startline(BYTE *buffer, WORD max)
+startline:
+		mov		#8,r0
+		jmp		(_VETTAB(r0))
+;--------------------------------------------------------------------------
+; WORD getline(WORD param)
+getline:
+		mov		#10,r0
+		jmp		(_VETTAB(r0))
+

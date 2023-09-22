@@ -1,0 +1,159 @@
+;;Aluno: João Carlos Batista       Cartão: 00343016
+
+ORG 0
+
+reinicia:                     ;;Reinicia variáveis para próxima execução
+	LDR A #0
+	STR A TAM_SFILE
+	STR A TAM_SLOOK
+	STR A SRES
+
+inicio:
+	LDR A SFILE, I           ;;Verifica o caso em que SFILE é nulo
+	JZ sfile_null
+
+	LDR B SFILE
+	STR B COP_SFILE            ;;Copia SFILE para COP_SFILE
+	JMP cardinalidade_file
+
+cardinalidade_file:
+	LDR X #1                   ;;Passa pelos valores dos endereços subsequentes a 
+	ADD X COP_SFILE            ;;COP_SFILE até chegar em 0 (condição de parada da string
+        STR X COP_SFILE            ;;Para conseguir a cardinalidade de cada string
+	LDR A COP_SFILE, I
+	JZ fim_cardinalidade_file
+	LDR X #1
+	ADD X TAM_SFILE
+        STR X TAM_SFILE
+	JMP cardinalidade_file
+	
+fim_cardinalidade_file:
+	LDR X #1
+	ADD X TAM_SFILE
+	STR X TAM_SFILE
+	LDR A SLOOK, I        ;;Verifica caso em que SLOOK é nulo
+	JZ slook_null
+
+	LDR B SLOOK
+	STR B COP_SLOOK
+	JMP cardinalidade_look
+
+cardinalidade_look:
+        LDR X #1                 ;;Verifica a cardinalidade da string SLOOK
+	ADD X COP_SLOOK
+        STR X COP_SLOOK     
+	LDR A COP_SLOOK, I
+	JZ verifica_maior
+        LDR X #1
+	ADD X TAM_SLOOK
+        STR X TAM_SLOOK         
+	JMP cardinalidade_look
+
+verifica_maior:             ;;Utilizando as cardinalidades, verifica se SLOOK é maior
+	LDR X #1            ;;que SFILE, se for, termina o programa
+	ADD X TAM_SLOOK
+	STR X TAM_SLOOK
+	LDR A TAM_SLOOK
+	SUB A TAM_SFILE
+	JZ continua         ;;Se ambos tiverem cardinalidade igual
+	JC sfile_null       ;;Se SLOOK for maior que SFILE
+	JMP continua        ;;Se SFILE for maior que SLOOK
+
+continua:
+	LDR A SFILE
+	STR A COP_SFILE
+	STR A PIV_SFILE     ;;Fixa o pivô de SFILE que serve como ponteiro para o primeiro
+	LDR A SLOOK         ;;valor igual entre SLOOK e SFILE
+	STR A COP_SLOOK
+	JMP laco_principal
+
+
+
+laco_principal:
+	LDR A COP_SLOOK, I  ;;Verifica se SLOOK terminou (caso em que SLOOK está contido em SFILE)
+	JZ termino_slook
+	LDR A COP_SFILE, I  ;;Verifica se SFILE terminou (caso em que SLOOK não está contido em SFILE)
+	JZ termino_sfile
+	
+	OR A COP_SLOOK, I   ;;Verifica se o conteúdo de SLOOK é igual ao de SFILE
+	NOT A               ;;É basicamente a implementação da tabela verdade:
+	STR A OP_LOG1       ;;[~(A or B) or (A and B)], que representa a tabela verdade
+	LDR A COP_SFILE, I  ;;"se, e somente se" (bicondição)
+	LDR B COP_SLOOK, I
+	STR B OP_LOG2
+	AND A OP_LOG2
+	STR A OP_LOG2
+	LDR A OP_LOG1
+	OR A OP_LOG2
+	NOT A               ;;Como no caso "igual" a tabela verdade retorna 111...1, é necessário negar o resultado
+	JMP 140
+
+ORG 140   ;;org para evitar que o código se sobreponha
+
+	JZ iguais            ;;Pula se forem iguais
+        LDR X #1             ;;Senão incrementa o pivô
+	ADD X PIV_SFILE
+        STR X PIV_SFILE
+	LDR A PIV_SFILE
+	STR A COP_SFILE
+	LDR A SLOOK
+	STR A COP_SLOOK
+	JMP laco_principal     ;;Repete o laço principal
+
+
+iguais:
+	LDR X #1               ;;Se forem iguais, incrementa a cópia de SFILE e SLOOK
+	ADD X COP_SFILE        ;;NÃO incrementa o pivô se forem iguais
+        STR X COP_SFILE
+	LDR X #1
+	ADD X COP_SLOOK
+	STR X COP_SLOOK
+	JMP laco_principal
+
+
+termino_sfile:                 ;;Caso SFILE termine antes de SLOOK
+	LDR A #0               ;;Coloca 0 no resultado
+	STR A SRES 
+	JMP fim
+
+termino_slook:
+	LDR A PIV_SFILE        ;;Caso SLOOK termine antes de SFILE
+	STR A SRES             ;;Coloca o pivô no resultado
+	JMP fim
+
+sfile_null:                    ;;Caso SFILE seja nulo
+	LDR A #0               ;;Coloca 0 no resultado
+	STR A SRES
+	JMP fim
+
+slook_null:                    ;;Caso SLOOK seja nulo
+	LDR A TAM_SFILE        ;;Adiciona SFILE à cardinalidade de SFILE
+	ADD A SFILE            ;;Retorna a soma dos dois
+	STR A SRES
+	JMP fim
+
+fim:
+	HLT
+
+ORG 128
+
+TAM_SFILE: DB 0       ;;Cardinalidade de SFILE
+TAM_SLOOK: DB 0       ;;Cardinalidade de SLOOK
+
+COP_SFILE: DB 0       ;;Cópia de SFILE
+COP_SLOOK: DB 0       ;;Cópia de SLOOK
+
+PIV_SFILE: DB 0       ;;Pivô de SFILE
+
+OP_LOG1: DB 0         ;;Primeira operação lógica
+OP_LOG2: DB 0         ;;Segunda operação lógica
+
+
+
+
+ORG 224
+
+SFILE: DB 0
+SLOOK: DB 0
+SRES: DB 0
+

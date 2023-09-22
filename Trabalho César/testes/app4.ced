@@ -1,0 +1,157 @@
+;
+;
+;******************************************************************************
+;
+;	Aplicação de teste do Kernel do professor
+;
+;	Versão: 2023.1
+;
+;	Áreas de memória
+;
+;	0100 - 01FF		_VETTAB
+;					Tabela com os vetores das funções do kernel
+;					*** CUIDADO! Esse vetor está no meio da área de código ***
+;
+;	8000 - FF7F		_APP
+;					Área onde será colocado o programa de aplicação.
+;					Esse programa vai fazer o acesso aos periféricos e interrupções, através das funções do Kernel.
+;
+;	- kbhit
+;	- putmsg
+;	- getchar
+;******************************************************************************
+
+
+_VETTAB:	equ	h0100
+_APP:		equ	h8000
+
+AREA_ESQUERDA:	equ		0
+AREA_DIREITA:	equ		1
+
+PARAM_RESET:	equ		0
+PARAM_FINISHED:	equ		1
+PARAM_TIME:		equ		2
+PARAM_BUFFER:	equ		3
+PARAM_SIZE:		equ		4
+		
+MINV:			equ		H20
+MAXV:			equ		H7E
+FF:				equ		H0C
+CR:				equ		H0D
+LF:				equ		H0A
+BS:				equ		H08
+		
+	org		_APP
+		
+;------------------------------------------------------------------------------
+	clr		counter
+
+	; putmsg(ESQUERDA, "\r\nteste kbhit() ")
+	mov		#AREA_ESQUERDA,r5
+	mov		#idmsg,r4
+	jsr		r7,putmsg
+	
+loop:
+	inc		counter
+	
+	jsr		r7,format_counter
+	
+	mov		#AREA_ESQUERDA,r5
+	mov		#string,r4
+	jsr		r7,putmsg
+	mov		#AREA_ESQUERDA,r5
+	mov		#bs4,r4
+	jsr		r7,putmsg
+	
+	jsr		r7,kbhit
+	tst		r0
+	bne		loop
+	jsr		r7,getchar
+	
+	mov		#AREA_DIREITA,r5
+	mov		#string,r4
+	clr		r3
+	jsr		r7,putmsg
+	
+	br		loop
+
+counter:	dw	0
+idmsg:	dab	CR, LF, 'teste kbhit() ',0
+bs4:	dab	BS, BS, BS, BS, 0
+
+;
+;	r1=counter
+;	r2=&string[3]
+;	r3=4
+;	do
+;		r0 = toascii(r1&0x000F)
+;		*r2 = LOWBYTE(r0)
+;		r1 >>= 4;
+;		r2--
+;	while (--r3 != 0);
+;	string[4] = '\0'
+;
+string:	dab		[10]
+format_counter:
+	mov		counter,r1
+	mov		#string+3,r2
+	mov		#4,r3
+
+fc_loop:		
+	mov		r1,r0
+	and		#h000f,r0
+	add		#'0',r0
+	cmp		r0,#'9'
+	ble		fc_1
+	add		#7,r0
+fc_1:
+	and		#hff00,-1(r2)
+	or		r0,-1(r2)
+	
+	asr		r1
+	asr		r1
+	asr		r1
+	asr		r1
+	
+	dec		r2
+
+	sob		r3,fc_loop
+	
+	clr		string+4
+
+	rts		r7
+
+
+;--------------------------------------------------------------------------
+; WORD kbhit(void)
+kbhit:
+		mov		#0,r0
+		jmp		(_VETTAB(r0))
+;--------------------------------------------------------------------------
+; WORD getchar(void)
+getchar:
+		mov		#2,r0
+		jmp		(_VETTAB(r0))
+;--------------------------------------------------------------------------
+; WORD putchar(WORD area, BYTE caractere)
+; WORD putchar(WORD area, BYTE caractere, WORD pos)
+putchar:
+		mov		#4,r0
+		jmp		(_VETTAB(r0))
+;--------------------------------------------------------------------------
+; WORD putmsg(WORD area, BYTE* msg)
+; WORD putmsg(WORD area, BYTE* msg, WORD pos)
+putmsg:
+		mov		#6,r0
+		jmp		(_VETTAB(r0))
+;--------------------------------------------------------------------------
+; WORD startline(BYTE *buffer, WORD max)
+startline:
+		mov		#8,r0
+		jmp		(_VETTAB(r0))
+;--------------------------------------------------------------------------
+; WORD getline(WORD param)
+getline:
+		mov		#10,r0
+		jmp		(_VETTAB(r0))
+
